@@ -4,6 +4,7 @@
 
 #include <format>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <vector>
 
@@ -20,14 +21,17 @@ namespace po = boost::program_options;
 #include "content_stream_string.h"
 
 
-static constexpr double mm_per_in = 25.4;
-static constexpr double pt_per_in = 72.0;
+static constexpr double MM_PER_IN = 25.4;
+static constexpr double PT_PER_IN = 72.0;
 
 
-static constexpr double PAGE_INSET_LEFT_IN   = 0.625;
-static constexpr double PAGE_INSET_RIGHT_IN  = 0.625;
-static constexpr double PAGE_INSET_TOP_IN    = 0.625;
-static constexpr double PAGE_INSET_BOTTOM_IN = 1.024;
+static constexpr double PAGE_INSET_LEFT_IN     = 0.625;
+static constexpr double PAGE_INSET_RIGHT_IN    = 0.625;
+static constexpr double PAGE_INSET_TOP_IN      = 0.625;
+static constexpr double PAGE_INSET_BOTTOM_IN   = 1.024;
+
+static constexpr double REG_MARK_SIZE_IN       = 0.250;
+static constexpr double REG_MARK_LINE_WIDTH_MM = 0.5;
 
 
 struct RegistrationGeometry
@@ -90,23 +94,85 @@ static std::string create_registration(double page_width_in,
 }
 
 
-static std::string create_overlay(const OverlayGeometry& geom)
+static std::map<int, std::string> legend_map =
+{
+#if 1
+  { 11, "ln e^x"   },
+  { 12, "log 10^x" },
+  { 13, "? fact"   },
+  { 14, "sin -1"   },
+  { 15, "cos -1"   },
+  { 16, "tan -1"   },
+#else
+  { 11, "SL"       },
+  { 12, "SR"       },
+  { 13, "RL"       },
+  { 14, "RR"       },
+  { 15, "RLn"      },
+  { 16, "RRn"      },
+#endif
+  { 17, "MASKL"    },
+  { 18, "MASKR"    },
+  { 19, "RMD"      },
+  { 10, "XOR"      },
+
+  { 21, "x<>(i)"   },
+  { 22, "x<>I"     },
+  { 23, "SH HEX"   },
+  { 24, "SH DEC"   },
+  { 25, "SH OCT"   },
+  { 26, "SH BIN"   },
+  { 27, "SB"       },
+  { 28, "CB"       },
+  { 29, "B?"       },
+  { 30, "AND"      },
+
+  { 31, "(i)"      },
+  { 32, "I"        },
+  { 33, "CL PRGM"  },
+  { 34, "CL REG"   },
+  { 35, "CL PRFX"  },
+  { 36, "WINDOW"   },
+  { 37, "1s COMP"  },
+  { 38, "2s COMP"  },
+  { 39, "UNSIGNED" },
+  { 40, "NOT"      },
+
+  { 41, ""         },
+  { 42, ""         },
+  { 43, ""         },
+  { 44, "WSIZE"    },
+  { 45, "FLOAT"    },
+
+  { 47, "MEM"      },
+  { 48, "STATUS"   },
+  { 49, "EEX"      },
+  { 40, "OR"       },
+};
+
+
+static std::string create_overlay(const OverlayGeometry& geom,
+				  bool show_outlines,
+				  bool show_legends)
 {
   std::string s;
   double line_width_mm = 0.1;
-  double line_width_in = line_width_mm / mm_per_in;
+  double line_width_in = line_width_mm / MM_PER_IN;
 
   ContentStreamString cs(true);
-  cs.set_line_width(line_width_mm / mm_per_in);
+  cs.set_line_width(line_width_mm / MM_PER_IN);
   cs.set_color(BLACK, false, true);	// set stroke color
 
-  cs.move_to({ 0.0, geom.height_in });
-  cs.rounded_rect({ geom.width_in, geom.height_in}, geom.corner_radius_in);
-  cs.path_close_stroke();
+  if (show_outlines)
+  {
+    cs.move_to({ 0.0, geom.height_in });
+    cs.rounded_rect({ geom.width_in, geom.height_in}, geom.corner_radius_in);
+    cs.path_close_stroke();
+  }
 
   for (int row = 0; row < 4; row++)
   {
-    double y = geom.height_in - row * geom.key_row_pitch_in - geom.key_row_1_offset_in;
+    double y = geom.height_in - (row * geom.key_row_pitch_in + geom.key_row_1_offset_in);
     for (int col = 0; col < 10; col++)
     {
       if ((row == 3) && (col == 5))
@@ -114,16 +180,25 @@ static std::string create_overlay(const OverlayGeometry& geom)
       double key_height = geom.key_height_in;
       if ((row == 2) && (col == 5))
 	key_height += geom.key_row_pitch_in;	// if top half of enter key, it's a tall key
-      double x = geom.width_in / 2.0 - (5 * geom.key_col_pitch_in) + (geom.key_col_pitch_in - geom.key_width_in) / 2.0 + col * geom.key_col_pitch_in;
-      cs.move_to({ x, y });
-      cs.rounded_rect({ geom.key_width_in, key_height }, geom.key_corner_radius_in);
-      cs.path_close_stroke();
+      int user_kc = (row + 1) * 10 + (col + 1) % 10;
 
-      cs.text({ x + geom.key_width_in / 2.0, y + 0.03 },
-	      HorizontalAlignment::CENTER,
-	      "Hello",
-	      "F1",
-	      6.0 / pt_per_in);
+      double x = geom.width_in / 2.0 - (5 * geom.key_col_pitch_in) + (geom.key_col_pitch_in - geom.key_width_in) / 2.0 + col * geom.key_col_pitch_in;
+
+      if (show_outlines)
+      {
+	cs.move_to({ x, y });
+	cs.rounded_rect({ geom.key_width_in, key_height }, geom.key_corner_radius_in);
+	cs.path_close_stroke();
+      }
+
+      if (show_legends)
+      {
+	cs.text({ x + geom.key_width_in / 2.0 - 0.125, y + 0.03 },
+		HorizontalAlignment::CENTER,
+		legend_map[user_kc],
+		"F1",
+		6.0 / PT_PER_IN);
+      }
     }
   }
 
@@ -133,53 +208,75 @@ static std::string create_overlay(const OverlayGeometry& geom)
 
 constexpr RegistrationGeometry cameo4_no_mat_reg_geometry =
 {
-  .inset_left_in   = 0.625,
-  .inset_right_in  = 0.625,
-  .inset_top_in    = 0.625,
-  .inset_bottom_in = 1.024,
+  .inset_left_in   = PAGE_INSET_LEFT_IN,
+  .inset_right_in  = PAGE_INSET_RIGHT_IN,
+  .inset_top_in    = PAGE_INSET_TOP_IN,
+  .inset_bottom_in = PAGE_INSET_BOTTOM_IN,
 
-  .square_size_in  = 0.2,
-  .line_length_in  = 0.5,
-  .line_width_in   = 0.5 / mm_per_in
+  .square_size_in  = REG_MARK_SIZE_IN,
+  .line_length_in  = REG_MARK_SIZE_IN,
+  .line_width_in   = REG_MARK_LINE_WIDTH_MM / MM_PER_IN,
 };
 
 
 static constexpr float OVERLAY_MINIMUM_Y_GAP_IN = 0.1;
 
+static constexpr float ADDITIONAL_INSET_IN = 0.1;
 
 static QPDFObjectHandle createPageContents(QPDF& pdf,
 					   double page_width_in,
 					   double page_height_in,
+					   const RegistrationGeometry& reg_geom,
 					   const OverlayGeometry& geom,
 					   bool show_outlines,
-					   bool show_reg_marks)
+					   bool show_reg_marks,
+					   bool show_legends)
 {
   // Create a stream that displays our image and the given text in
   // our font.
   std::string contents;
 
-  static double available_height_in = page_height_in - PAGE_INSET_TOP_IN - PAGE_INSET_BOTTOM_IN;
+  static double top_in = reg_geom.inset_top_in + ADDITIONAL_INSET_IN;
+  std::cout << "top_in " << top_in << "\n";
+  static double bottom_in = page_height_in - (reg_geom.inset_bottom_in + ADDITIONAL_INSET_IN);
+  std::cout << "bottom_in " << bottom_in << "\n";
+  static double available_height_in = bottom_in - top_in;
+  std::cout << "available_height_in_in " << available_height_in << "\n";
   static int y_count = available_height_in / geom.height_in;
   if ((available_height_in - ((y_count * geom.height_in) / (y_count - 1))) < OVERLAY_MINIMUM_Y_GAP_IN)
     y_count--;
   static double overlay_y_gap_in = (available_height_in - (y_count * geom.height_in)) / (y_count - 1);
+  std::cout << "overlay_y_gap_in " << overlay_y_gap_in << "\n";
 
+  // transform to inch coordinate system, origin at left
   contents = ("q "                                // push graphics stack
-	      + std::format("{0:g} 0 0 {0:g} 0 0 cm ", pt_per_in)	// transform to inch coordinate system, origin at top left
+	      + std::format("{0:g} 0 0 {0:g} 0 0 cm ", PT_PER_IN)
 	      );
 
   if (show_reg_marks)
-    contents += create_registration(page_width_in, page_height_in, cameo4_no_mat_reg_geometry);
-
-  //for (int y = 0; y < y_count; y++)
-  for (int y = 1; y < 2; y++)
   {
-    double left = (page_width_in - geom.width_in) / 2.0;
-    double bottom = page_height_in - PAGE_INSET_TOP_IN - ((y + 1) * geom.height_in) - (y * overlay_y_gap_in);
-    contents += ("q "
-		 + std::format("1 0 0 1 {0:g} {1:g} cm\n", left, bottom));
+    contents += "q\n";
+    contents += create_registration(page_width_in, page_height_in, cameo4_no_mat_reg_geometry);
+    contents += "Q\n";
+  }
 
-    contents += create_overlay(geom);
+  for (int y = 0; y < y_count; y++)
+  {
+    std::cout << "overlay " << y << "\n";
+    double left = (page_width_in - geom.width_in) / 2.0;
+    std::cout << "left " << left << "\n";
+    double top = top_in + (y * (geom.height_in + overlay_y_gap_in));
+    std::cout << "top " << top << "\n";
+    double bottom = top + geom.height_in;
+    std::cout << "bottom " << bottom << "\n";
+
+    // transform to inch coordinate system, origin at bottom left
+    // XXX why the heck do I need to subtract 1.75 from bottom for HP Voyager,
+    // ? for SwissMicros???
+    contents += ("q "
+ 		 + std::format("1 0 0 1 {0:g} {1:g} cm\n", left, bottom - 1.55));
+
+    contents += create_overlay(geom, show_outlines, show_legends);
 
     contents += "Q\n";
   }
@@ -194,16 +291,18 @@ static QPDFObjectHandle createPageContents(QPDF& pdf,
 constexpr double letter_width_in = 8.5;
 constexpr double letter_height_in = 11.0;
 
-constexpr double letter_width_pt = letter_width_in * pt_per_in;
-constexpr double letter_height_pt = letter_height_in * pt_per_in;
+constexpr double letter_width_pt = letter_width_in * PT_PER_IN;
+constexpr double letter_height_pt = letter_height_in * PT_PER_IN;
 
 
 static void create_page(QPDFPageDocumentHelper &dh,
 			std::string font_name,
 			QPDFObjectHandle font_obj,
+			RegistrationGeometry reg_geom,
 			const OverlayGeometry& geom,
 			bool do_outlines,
-			bool do_reg_marks)
+			bool do_reg_marks,
+			bool do_legends)
 {
   QPDF& pdf(dh.getQPDF());
   
@@ -222,9 +321,11 @@ static void create_page(QPDFPageDocumentHelper &dh,
     createPageContents(pdf,
 		       letter_width_in,
 		       letter_height_in,
+		       reg_geom,
 		       geom,
 		       do_outlines,  // show_outlines
-		       do_reg_marks);// show_reg_marks
+		       do_reg_marks, // show_reg_marks
+		       do_legends);  // show legends
 
   // Create the page dictionary
   std::string page_dict_stream_str = ("<<"
@@ -245,9 +346,11 @@ static void create_page(QPDFPageDocumentHelper &dh,
 
 
 static void create_pdf(const std::string filename,
+		       const RegistrationGeometry& reg_geom,
 		       const OverlayGeometry& geom,
 		       bool do_outlines,
-		       bool do_reg_marks)
+		       bool do_reg_marks,
+		       bool do_legends)
 {
   QPDF pdf;
 
@@ -268,9 +371,11 @@ static void create_pdf(const std::string filename,
   create_page(dh,
 	      "F1",        // font_name
 	      font_obj,    // font_obj
+	      reg_geom,
 	      geom,
 	      do_outlines,
-	      do_reg_marks);
+	      do_reg_marks,
+	      do_legends);
 
   QPDFWriter w(pdf, filename.c_str());
   w.write();
@@ -390,7 +495,7 @@ int main(int argc, char* argv[])
       type = "all";
       do_reg_marks = true;
       do_legends = true;
-      do_outlines  = false;
+      do_outlines  = true;
     }
 
     if (vm.count("sm"))
@@ -412,9 +517,11 @@ int main(int argc, char* argv[])
 
   std::string filename = model + "-overlay-" + type + ".pdf";
   create_pdf(filename,
+	     cameo4_no_mat_reg_geometry,
 	     *geom,
 	     do_outlines,
-	     do_reg_marks);
+	     do_reg_marks,
+	     do_legends);
 
   return 0;
 }
