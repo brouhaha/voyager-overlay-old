@@ -1,4 +1,4 @@
-// Copyright 2023 Eric Smith <spacewar@gmail.com>
+// Copyright 2023 Eric Smith
 // SPDX-License-Identifier: GPL-3.0-only
 
 #ifndef CONTENT_STREAM_STRING_H

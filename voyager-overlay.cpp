@@ -1,5 +1,5 @@
 // Generate Voyager calculator keyboard overlays
-// Copyright 2023 Eric Smith <spacewar@gmail.com>
+// Copyright 2023 Eric Smith
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include <format>

@@ -1,3 +1,6 @@
+# Copyright 2023 Eric Smith
+# SPDX-License-Identifier: GPL-3.0-only
+
 env = Environment(CXXFLAGS = "-g --std=c++20")
 
 env.ParseConfig('pkg-config --cflags --libs freetype2')

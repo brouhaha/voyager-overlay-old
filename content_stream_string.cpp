@@ -1,3 +1,6 @@
+// Copyright 2023 Eric Smith
+// SPDX-License-Identifier: GPL-3.0-only
+
 #include <cmath>
 #include <format>
 #include <stdexcept>
